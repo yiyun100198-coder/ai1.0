@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <!-- 設定網頁編碼格式為 UTF-8 -->
+    <meta charset="UTF-8">
+    <!-- 設定響應式視埠，確保在手機與電腦上均能正確縮放 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 網頁標題 -->
+    <title>像素風星空 2048</title>
+    <!-- 引入 Google Fonts 像素風格字體 Press Start 2P -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <!-- 引入 Tailwind CSS 庫進行基礎排版設計 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 全域樣式設定：選用像素字體，並防止手機滑動螢幕時頁面隨之滾動 */
+        body {
+            font-family: 'Press Start 2P', cursive;
+            background-color: #0b0e14;
+            color: #ffffff;
+            touch-action: none; /* 禁止預設觸控手勢預防滑動干擾 */
+            user-select: none; /* 禁止文字選取 */
+            overflow: hidden; /* 隱藏滾動條 */
+        }
+
+        /* 渲染像素點陣效果：影像與元素不會因為縮放而模糊，呈現經典懷舊像素感 */
+        .pixelated {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        /* 像素風外框與邊框樣式 */
+        .pixel-box {
+            border: 4px solid #ffffff;
+            box-shadow: 
+                0 4px 0 0 #000000,
+                0 -4px 0 0 #000000,
+                4px 0 0 0 #000000,
+                -4px 0 0 0 #000000,
+                0 6px 0 0 #3b4252,
+                0 0 15px rgba(147, 51, 234, 0.4);
+        }
+
+        /* 像素按鈕樣式與按下效果 */
+        .pixel-btn {
+            position: relative;
+            background-color: #6d28d9;
+            border: 4px solid #ffffff;
+            box-shadow: -4px 4px 0px #2e1065;
+            transition: all 0.1s ease;
+        }
+
+        /* 按鈕滑鼠懸停效果 */
+        .pixel-btn:hover {
+            background-color: #7c3aed;
+            transform: translateY(-2px);
+        }
+
+        /* 按鈕點擊效果 */
+        .pixel-btn:active {
+            transform: translateY(2px);
+            box-shadow: -2px 2px 0px #2e1065;
+        }
+
+        /* 背景 Canvas 層，填滿整個螢幕 */
+        #space-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        /* 遊戲主要介面層（覆蓋在星空 Canvas 之上） */
+        .game-layer {
+            position: relative;
+            z-index: 10;
+        }
+
+        /* 網格方塊樣式設定 */
+        .tile-cell {
+            position: relative;
+            background-color: rgba(30, 41, 59, 0.7);
+            border: 2px solid #334155;
+            border-radius: 4px;
+        }
+
+        /* 2048 方塊動態色彩與像素陰影樣式（依照數字數值變化） */
+        .tile {
+            position: absolute;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.25rem;
+            font-weight: bold;
+            border: 3px solid #ffffff;
+            transition: transform 0.12s ease-in-out, background-color 0.12s ease;
+            box-shadow: inset -4px -4px 0px rgba(0,0,0,0.4);
+            border-radius: 4px;
+        }
+
+        /* 數字 2 樣式 */
+        .tile-2 { background-color: #3b82f6; color: #ffffff; text-shadow: 2px 2px #1e3a8a; }
+        /* 數字 4 樣式 */
+        .tile-4 { background-color: #06b6d4; color: #ffffff; text-shadow: 2px 2px #155e75; }
+        /* 數字 8 樣式 */
+        .tile-8 { background-color: #10b981; color: #ffffff; text-shadow: 2px 2px #065f46; }
+        /* 數字 16 樣式 */
+        .tile-16 { background-color: #84cc16; color: #ffffff; text-shadow: 2px 2px #3f6212; }
+        /* 數字 32 樣式 */
+        .tile-32 { background-color: #eab308; color: #ffffff; text-shadow: 2px 2px #854d0e; }
+        /* 數字 64 樣式 */
+        .tile-64 { background-color: #f97316; color: #ffffff; text-shadow: 2px 2px #9a3412; }
+        /* 數字 128 樣式 */
+        .tile-128 { background-color: #ef4444; color: #ffffff; text-shadow: 2px 2px #991b1b; box-shadow: 0 0 10px #ef4444; }
+        /* 數字 256 樣式 */
+        .tile-256 { background-color: #ec4899; color: #ffffff; text-shadow: 2px 2px #9d174d; box-shadow: 0 0 15px #ec4899; }
+        /* 數字 512 樣式 */
+        .tile-512 { background-color: #a855f7; color: #ffffff; text-shadow: 2px 2px #581c87; box-shadow: 0 0 20px #a855f7; }
+        /* 數字 1024 樣式 */
+        .tile-1024 { background-color: #6366f1; color: #ffffff; text-shadow: 2px 2px #3730a3; box-shadow: 0 0 25px #6366f1; }
+        /* 數字 2048 樣式 */
+        .tile-2048 { background-color: #f43f5e; color: #ffffff; text-shadow: 2px 2px #881337; box-shadow: 0 0 30px #f43f5e; animation: pulse 1s infinite alternate; }
+        /* 數字超過 2048 樣式 */
+        .tile-super { background-color: #14b8a6; color: #ffffff; text-shadow: 2px 2px #115e59; box-shadow: 0 0 35px #14b8a6; }
+
+        /* 新增方塊時的動畫效果 */
+        @keyframes tile-spawn {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .tile-new {
+            animation: tile-spawn 0.15s ease-out;
+        }
+
+        /* 脈衝發光動畫（用於 2048 方塊） */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.05); }
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-center items-center m-0 p-0 overflow-hidden pixelated">
+
+    <!-- 背景動態星空畫布 -->
+    <canvas id="space-canvas"></canvas>
+
+    <!-- 遊戲主要內容區域 -->
+    <div class="game-layer flex flex-col items-center justify-center p-4 max-w-md w-full">
+        
+        <!-- 標題與計分板區域 -->
+        <div class="w-full flex justify-between items-center mb-6">
+            <!-- 遊戲像素風主標題 -->
+            <div>
+                <h1 class="text-3xl sm:text-4xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 drop-shadow-[2px_2px_0_#000]">
+                    2048
+                </h1>
+                <p class="text-[10px] text-gray-400 mt-1">SPACE PIXEL EDITION</p>
+            </div>
+
+            <!-- 分數統計區塊 -->
+            <div class="flex gap-2">
+                <!-- 目前得分區塊 -->
+                <div class="pixel-box bg-slate-900/90 px-3 py-2 text-center rounded">
+                    <div class="text-[8px] text-purple-400 mb-1">SCORE</div>
+                    <div id="score" class="text-xs sm:text-sm text-white">0</div>
+                </div>
+                <!-- 最高紀錄區塊 -->
+                <div class="pixel-box bg-slate-900/90 px-3 py-2 text-center rounded">
+                    <div class="text-[8px] text-yellow-400 mb-1">BEST</div>
+                    <div id="best-score" class="text-xs sm:text-sm text-white">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 功能與操作按鈕列 -->
+        <div class="w-full flex justify-between items-center mb-4">
+            <span class="text-[10px] text-gray-300">Join numbers to get 2048!</span>
+            <!-- 重新開始遊戲按鈕 -->
+            <button id="restart-btn" class="pixel-btn text-xs px-3 py-2 text-white font-bold cursor-pointer rounded">
+                RESET
+            </button>
+        </div>
+
+        <!-- 2048 棋盤主要容器 -->
+        <div class="relative pixel-box bg-slate-900/80 p-3 rounded-lg border-4 border-purple-500">
+            <!-- 背景 4x4 網格系統 -->
+            <div id="grid-container" class="grid grid-cols-4 gap-3 w-72 h-72 sm:w-80 sm:h-80">
+                <!-- 由 JavaScript 自動動態生成 16 個格子背景 -->
+            </div>
+
+            <!-- 動態數字方塊容器（絕對定位於網格上方） -->
+            <div id="tile-container" class="absolute inset-0 p-3 pointer-events-none">
+                <!-- 數字方塊將在這裡被動態渲染 -->
+            </div>
+
+            <!-- 遊戲結束遮罩層 (Game Over) -->
+            <div id="game-over-overlay" class="absolute inset-0 bg-black/85 flex flex-col justify-center items-center text-center hidden z-20 rounded-lg">
+                <h2 class="text-2xl text-red-500 font-bold mb-4 animate-bounce">GAME OVER</h2>
+                <p class="text-xs text-gray-300 mb-6" id="final-score-text">Final Score: 0</p>
+                <button id="retry-btn" class="pixel-btn px-4 py-2 text-xs text-white font-bold cursor-pointer">
+                    TRY AGAIN
+                </button>
+            </div>
+        </div>
+
+        <!-- 底部提示說明與操作指南 -->
+        <div class="mt-6 text-center text-gray-400 text-[10px] leading-relaxed">
+            <p class="mb-1">用鍵盤方向鍵 <span class="text-purple-400">↑ ↓ ← →</span> 移動</p>
+            <p>或在手機上滑動螢幕進行操作</p>
+        </div>
+    </div>
+
+    <!-- 遊戲核心邏輯腳本 -->
+    <script>
+        // ==========================================
+        // 1. 動態像素星空背景 Canvas 邏輯
+        // ==========================================
+        const spaceCanvas = document.getElementById('space-canvas'); // 取得星空畫布元件
+        const ctx = spaceCanvas.getContext('2d'); // 取得 2D 渲染上下文
+
+        let stars = []; // 儲存所有星星物件的陣列
+        const numStars = 120; // 畫布上的星星總數
+
+        // 調整 Canvas 尺寸以適應視窗大小
+        function resizeCanvas() {
+            spaceCanvas.width = window.innerWidth;
+            spaceCanvas.height = window.innerHeight;
+            initStars(); // 重新初始化星星
+        }
+
+        // 初始化星星陣列
+        function initStars() {
+            stars = [];
+            for (let i = 0; i < numStars; i++) {
+                stars.push({
+                    x: Math.random() * spaceCanvas.width, // 隨機 X 軸位置
+                    y: Math.random() * spaceCanvas.height, // 隨機 Y 軸位置
+                    size: Math.random() < 0.8 ? 2 : 4, // 像素尺寸（2px 或 4px）
+                    speed: Math.random() * 0.5 + 0.1, // 往下移動速度
+                    color: ['#ffffff', '#a78bfa', '#60a5fa', '#f472b6'][Math.floor(Math.random() * 4)], // 像素星色彩
+                    alpha: Math.random(), // 現有透明度
+                    alphaSpeed: Math.random() * 0.02 + 0.005 // 閃爍變化速度
+                });
+            }
+        }
+
+        // 繪製與更新星空動畫迴圈
+        function drawSpace() {
+            // 繪製半透明黑色背景以創造尾跡/漸隱效果
+            ctx.fillStyle = '#0b0e14';
+            ctx.fillRect(0, 0, spaceCanvas.width, spaceCanvas.height);
+
+            // 遍歷並繪製每一顆星星
+            stars.forEach(star => {
+                // 更新星星位置（向上或向下漂移，這裡設定緩慢向下移動）
+                star.y += star.speed;
+                if (star.y > spaceCanvas.height) {
+                    star.y = 0;
+                    star.x = Math.random() * spaceCanvas.width;
+                }
+
+                // 更新星星閃爍效果 (Alpha 透明度變化)
+                star.alpha += star.alphaSpeed;
+                if (star.alpha > 1 || star.alpha < 0.2) {
+                    star.alphaSpeed = -star.alphaSpeed;
+                }
+
+                // 設置繪製色彩與透明度
+                ctx.fillStyle = star.color;
+                ctx.globalAlpha = Math.max(0, Math.min(1, star.alpha));
+                
+                // 繪製像素風格矩形星星 (關閉抗鋸齒)
+                ctx.fillRect(Math.floor(star.x), Math.floor(star.y), star.size, star.size);
+            });
+
+            ctx.globalAlpha = 1.0; // 重置透明度
+            requestAnimationFrame(drawSpace); // 請求下一幀動畫
+        }
+
+        // 監聽視窗尺寸改變事件
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas(); // 初始化畫布尺寸
+        drawSpace(); // 啟動星空動畫迴圈
+
+        // ==========================================
+        // 2. 2048 遊戲核心邏輯
+        // ==========================================
+        const GRID_SIZE = 4; // 網格邊長 (4x4)
+        let board = []; // 儲存 4x4 遊戲數值的矩陣
+        let score = 0; // 當前分數
+        let bestScore = localStorage.getItem('pixel_2048_best') || 0; // 從 LocalStorage 載入最高紀錄
+
+        // DOM 元素引用
+        const gridContainer = document.getElementById('grid-container');
+        const tileContainer = document.getElementById('tile-container');
+        const scoreDisplay = document.getElementById('score');
+        const bestScoreDisplay = document.getElementById('best-score');
+        const gameOverOverlay = document.getElementById('game-over-overlay');
+        const finalScoreText = document.getElementById('final-score-text');
+        const restartBtn = document.getElementById('restart-btn');
+        const retryBtn = document.getElementById('retry-btn');
+
+        // 初始化背景 4x4 空格 UI
+        function createGridUI() {
+            gridContainer.innerHTML = '';
+            for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'tile-cell w-full h-full';
+                gridContainer.appendChild(cell);
+            }
+        }
+
+        // 初始化遊戲 state
+        function initGame() {
+            // 建立 4x4 全 0 陣列
+            board = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0));
+            score = 0;
+            updateScore(0);
+            bestScoreDisplay.textContent = bestScore;
+            gameOverOverlay.classList.add('hidden'); // 隱藏 Game Over 畫面
+
+            // 隨機生成兩個初始方塊
+            addRandomTile();
+            addRandomTile();
+
+            // 渲染 UI
+            renderTiles();
+        }
+
+        // 更新分數顯示
+        function updateScore(amount) {
+            score += amount;
+            scoreDisplay.textContent = score;
+            if (score > bestScore) {
+                bestScore = score;
+                bestScoreDisplay.textContent = bestScore;
+                localStorage.setItem('pixel_2048_best', bestScore); // 儲存最高紀錄至本地
+            }
+        }
+
+        // 隨機在空白位置加入一個新方塊（90% 機率為 2，10% 機率為 4）
+        function addRandomTile() {
+            let emptyCells = [];
+            // 搜尋所有空位 (數值為 0 的位置)
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (board[r][c] === 0) {
+                        emptyCells.push({ r, c });
+                    }
+                }
+            }
+
+            // 如果有空位，隨機挑選一個填入數字
+            if (emptyCells.length > 0) {
+                const randomCell = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+                board[randomCell.r][randomCell.c] = Math.random() < 0.9 ? 2 : 4;
+            }
+        }
+
+        // 渲染所有數字方塊至畫面上
+        function renderTiles() {
+            tileContainer.innerHTML = ''; // 清空目前的方塊容器
+
+            // 計算格子邊長與間距，以便精確絕對定位
+            const containerWidth = gridContainer.clientWidth;
+            const gap = 12; // 與 CSS 中的 gap-3 (12px) 相對應
+            const padding = 12; // 與 CSS 中的 p-3 相對應
+            const tileSize = (containerWidth - (padding * 2) - (gap * (GRID_SIZE - 1))) / GRID_SIZE;
+
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const value = board[r][c];
+                    if (value !== 0) {
+                        const tile = document.createElement('div');
+                        
+                        // 根據數值決定對應的 CSS 類別名稱
+                        let tileClass = `tile-${value}`;
+                        if (value > 2048) tileClass = 'tile-super';
+
+                        tile.className = `tile ${tileClass} tile-new`;
+                        tile.textContent = value;
+
+                        // 動態動計算 Top 與 Left 偏移像素值
+                        const topPos = padding + r * (tileSize + gap);
+                        const leftPos = padding + c * (tileSize + gap);
+
+                        tile.style.width = `${tileSize}px`;
+                        tile.style.height = `${tileSize}px`;
+                        tile.style.top = `${topPos}px`;
+                        tile.style.left = `${leftPos}px`;
+
+                        // 針對較大的數字調整字型大小以防超出方塊
+                        if (value >= 100 && value < 1000) {
+                            tile.style.fontSize = '0.9rem';
+                        } else if (value >= 1000) {
+                            tile.style.fontSize = '0.7rem';
+                        }
+
+                        tileContainer.appendChild(tile);
+                    }
+                }
+            }
+        }
+
+        // 核心邏輯：處理單一行/列的壓縮與合併
+        function slide(row) {
+            // 1. 過濾掉 0 (將所有數字往左靠)
+            let arr = row.filter(val => val !== 0);
+            
+            // 2. 進行相鄰相同數字合併
+            for (let i = 0; i < arr.length - 1; i++) {
+                if (arr[i] === arr[i + 1]) {
+                    arr[i] *= 2; // 數字加倍
+                    updateScore(arr[i]); // 累計得分
+                    arr[i + 1] = 0; // 被合併的位子歸零
+                }
+            }
+            
+            // 3. 再次過濾 0 並補齊末尾的 0 填滿長度 4
+            arr = arr.filter(val => val !== 0);
+            while (arr.length < GRID_SIZE) {
+                arr.push(0);
+            }
+            return arr;
+        }
+
+        // 旋轉矩陣順時針 90 度 (輔助方向滑動運算)
+        function rotateMatrixClockwise(matrix) {
+            return matrix[0].map((_, index) => matrix.map(row => row[index]).reverse());
+        }
+
+        // 旋轉矩陣逆時針 90 度
+        function rotateMatrixCounterClockwise(matrix) {
+            return matrix[0].map((_, index) => matrix.map(row => row[index])).reverse();
+        }
+
+        // 處理向左移動
+        function moveLeft() {
+            let moved = false;
+            for (let r = 0; r < GRID_SIZE; r++) {
+                const originalRow = [...board[r]];
+                const newRow = slide(board[r]);
+                board[r] = newRow;
+                // 檢查該行是否有變化
+                if (JSON.stringify(originalRow) !== JSON.stringify(newRow)) {
+                    moved = true;
+                }
+            }
+            return moved;
+        }
+
+        // 處理向右移動 (翻轉 -> 左移 -> 翻轉)
+        function moveRight() {
+            for (let r = 0; r < GRID_SIZE; r++) {
+                board[r].reverse();
+            }
+            const moved = moveLeft();
+            for (let r = 0; r < GRID_SIZE; r++) {
+                board[r].reverse();
+            }
+            return moved;
+        }
+
+        // 處理向上移動 (順時針旋轉 -> 右移 -> 逆時針旋轉)
+        function moveUp() {
+            board = rotateMatrixCounterClockwise(board);
+            const moved = moveLeft();
+            board = rotateMatrixClockwise(board);
+            return moved;
+        }
+
+        // 處理向下移動
+        function moveDown() {
+            board = rotateMatrixClockwise(board);
+            const moved = moveLeft();
+            board = rotateMatrixCounterClockwise(board);
+            return moved;
+        }
+
+        // 通用移動控制入口函數
+        function handleMove(direction) {
+            let moved = false;
+            switch (direction) {
+                case 'LEFT': moved = moveLeft(); break;
+                case 'RIGHT': moved = moveRight(); break;
+                case 'UP': moved = moveUp(); break;
+                case 'DOWN': moved = moveDown(); break;
+            }
+
+            // 若有成功移動，隨機新增方塊並更新 UI，最後檢查是否 Game Over
+            if (moved) {
+                addRandomTile();
+                renderTiles();
+                if (checkGameOver()) {
+                    showGameOver();
+                }
+            }
+        }
+
+        // 檢查遊戲是否結束 (無空白格子且四周均無法再合併)
+        function checkGameOver() {
+            // 1. 尚有空位，遊戲繼續
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (board[r][c] === 0) return false;
+                }
+            }
+
+            // 2. 檢查水平方向是否有相鄰相同數字
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE - 1; c++) {
+                    if (board[r][c] === board[r][c + 1]) return false;
+                }
+            }
+
+            // 3. 檢查垂直方向是否有相鄰相同數字
+            for (let r = 0; r < GRID_SIZE - 1; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (board[r][c] === board[r + 1][c]) return false;
+                }
+            }
+
+            // 無法進行任何移動，遊戲結束
+            return true;
+        }
+
+        // 顯示 Game Over 遮罩與最終分數
+        function showGameOver() {
+            finalScoreText.textContent = `FINAL SCORE: ${score}`;
+            gameOverOverlay.classList.remove('hidden');
+        }
+
+        // ==========================================
+        // 3. 事件監聽 (鍵盤與觸控手勢)
+        // ==========================================
+
+        // 監聽鍵盤方向鍵事件
+        window.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'ArrowLeft':
+                case 'a':
+                case 'A':
+                    e.preventDefault();
+                    handleMove('LEFT');
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                case 'D':
+                    e.preventDefault();
+                    handleMove('RIGHT');
+                    break;
+                case 'ArrowUp':
+                case 'w':
+                case 'W':
+                    e.preventDefault();
+                    handleMove('UP');
+                    break;
+                case 'ArrowDown':
+                case 's':
+                case 'S':
+                    e.preventDefault();
+                    handleMove('DOWN');
+                    break;
+            }
+        });
+
+        // 移動端觸控滑動手勢變數
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchEndX = 0;
+        let touchEndY = 0;
+
+        const gameContainer = document.body;
+
+        // 記錄觸控開始點
+        gameContainer.addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, { passive: true });
+
+        // 記錄觸控結束點並計算滑動方向
+        gameContainer.addEventListener('touchend', (e) => {
+            touchEndX = e.changedTouches[0].screenX;
+            touchEndY = e.changedTouches[0].screenY;
+            handleSwipe();
+        }, { passive: true });
+
+        // 判斷滑動向量並觸發移動
+        function handleSwipe() {
+            const dx = touchEndX - touchStartX;
+            const dy = touchEndY - touchStartY;
+            const minSwipeDistance = 30; // 最小觸發滑動的距離值
+
+            // 比較水平與垂直方向滑動距離幅度
+            if (Math.abs(dx) > Math.abs(dy)) {
+                // 水平滑動
+                if (Math.abs(dx) > minSwipeDistance) {
+                    if (dx > 0) {
+                        handleMove('RIGHT');
+                    } else {
+                        handleMove('LEFT');
+                    }
+                }
+            } else {
+                // 垂直滑動
+                if (Math.abs(dy) > minSwipeDistance) {
+                    if (dy > 0) {
+                        handleMove('DOWN');
+                    } else {
+                        handleMove('UP');
+                    }
+                }
+            }
+        }
+
+        // 重新開始按鈕綁定事件
+        restartBtn.addEventListener('click', initGame);
+        retryBtn.addEventListener('click', initGame);
+
+        // 初始化 UI 與啟動遊戲
+        createGridUI();
+        initGame();
+    </script>
+</body>
+</html>
